@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { LogController } from 'fastify';
 
 /**
  * @returns {import('fastify').FastifyServerOptions} Instance of Fastify
  */
 function createConfigs() {
   return {
-    disableRequestLogging: true,
+    logController: new LogController({ disableRequestLogging: true }),
     logger: {
       level: process.env.ONF_LOG_LEVEL || 'debug'
     },
