@@ -1,0 +1,64 @@
+{
+  "name": "fastify-esm-ui",
+  "version": "1.2.0",
+  "description": "",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "test": "node --env-file=.env.test --test --test-concurrency=1 './tests/**/*.test.js'",
+    "test:firefox": "node --env-file=.env.test --env-file=.env.test.firefox --test --test-concurrency=1 './tests/business/e2e/**/*.test.js'",
+    "test:only": "node --env-file=.env.test --test --test-only './tests/**/*.test.js'",
+    "test:single": "node --env-file=.env.test --test --test-concurrency=1",
+    "test:cov": "c8 --reporter=text node --env-file=.env.test --test --test-concurrency=1 --test-reporter=dot './tests/**/*.test.js'",
+    "test:coverage": "c8 --reporter=text --reporter=lcov node --env-file=.env.test --test --test-concurrency=1 './tests/**/*.test.js'",
+    "test:report": "c8 --reporter=html node --env-file=.env.test --test --test-concurrency=1 --test-reporter=dot './tests/**/*.test.js'",
+    "test:ci": "node --env-file=.env.test --test --test-concurrency=1 --test-reporter=dot './tests/**/*.test.js'",
+    "dev": "npm run css:build && npm run js:build && node --env-file=.env --watch-path=./src src/server.js",
+    "start": "node src/server.js",
+    "lint": "eslint",
+    "lint:fix": "npm run lint -- --fix",
+    "css:build": "tailwindcss -i ./templates/css/custom.css -o ./public/css/styles.css --minify",
+    "js:build": "mkdir -p public/js && cp node_modules/alpinejs/dist/cdn.min.js public/js/alpine.min.js",
+    "update:deps": "npm run update:alpine"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leandroandrade/fastify-esm-ui.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/leandroandrade/fastify-esm-ui/issues"
+  },
+  "homepage": "https://github.com/leandroandrade/fastify-esm-ui#readme",
+  "dependencies": {
+    "@fastify/autoload": "^6.3.1",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/env": "^6.0.0",
+    "@fastify/error": "^4.2.0",
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/sensible": "^6.0.4",
+    "@fastify/static": "^9.1.3",
+    "@fastify/swagger": "^9.7.0",
+    "@fastify/swagger-ui": "^5.2.6",
+    "@fastify/view": "^11.1.1",
+    "close-with-grace": "^2.5.0",
+    "ejs": "^5.0.2",
+    "fastify": "^5.8.5",
+    "fastify-plugin": "^5.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "alpinejs": "^3.15.12",
+    "c8": "^11.0.0",
+    "eslint": "^9.33.0",
+    "neostandard": "^0.13.0",
+    "playwright": "^1.60.0",
+    "tailwindcss": "^4.3.0"
+  }
+}
