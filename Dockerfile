@@ -1,4 +1,4 @@
-FROM node:24.13.0-trixie-slim AS build
+FROM node:26.8-trixie-slim AS build
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends dumb-init \
@@ -16,7 +16,7 @@ RUN npx @tailwindcss/cli -i ./templates/css/custom.css -o ./public/css/styles.cs
 RUN npm run js:build
 RUN npm prune --omit=dev
 
-FROM node:24.13.0-trixie-slim
+FROM node:26.8-trixie-slim
 
 RUN apt-get update \
   && apt-get upgrade -y \
