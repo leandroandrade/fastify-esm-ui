@@ -1,7 +1,8 @@
 {
   "name": "fastify-esm-ui",
   "version": "1.2.0",
-  "description": "",
+  "private": true,
+  "description": "Template Fastify (ESM) com interface web: EJS, TailwindCSS e Alpine.js (build CSP)",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
@@ -13,16 +14,17 @@
     "test:coverage": "c8 --reporter=text --reporter=lcov node --env-file=.env.test --test --test-concurrency=1 './tests/**/*.test.js'",
     "test:report": "c8 --reporter=html node --env-file=.env.test --test --test-concurrency=1 --test-reporter=dot './tests/**/*.test.js'",
     "test:ci": "node --env-file=.env.test --test --test-concurrency=1 --test-reporter=dot './tests/**/*.test.js'",
-    "dev": "npm run css:build && npm run js:build && node --env-file=.env --watch-path=./src src/server.js",
+    "dev": "npm run build && node --env-file=.env --watch-path=./src src/server.js",
     "start": "node src/server.js",
     "lint": "eslint",
     "lint:fix": "npm run lint -- --fix",
     "css:build": "tailwindcss -i ./templates/css/custom.css -o ./public/css/styles.css --minify",
-    "js:build": "mkdir -p public/js && cp node_modules/alpinejs/dist/cdn.min.js public/js/alpine.min.js",
-    "update:deps": "npm run update:alpine"
+    "js:build": "mkdir -p public/js && cp node_modules/@alpinejs/csp/dist/cdn.min.js public/js/alpine.min.js",
+    "build": "npm run css:build && npm run js:build",
+    "e2e:setup": "playwright install chromium firefox"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=26"
   },
   "repository": {
     "type": "git",
@@ -53,8 +55,8 @@
     "fastify-plugin": "^6.0.1"
   },
   "devDependencies": {
+    "@alpinejs/csp": "^3.17.5",
     "@tailwindcss/cli": "^4.3.5",
-    "alpinejs": "^3.17.5",
     "c8": "^12.0.0",
     "eslint": "^10.15.0",
     "neostandard": "^0.14.1",

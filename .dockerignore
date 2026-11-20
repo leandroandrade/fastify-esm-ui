@@ -1,0 +1,16 @@
+# Everything is excluded first, then only what the Dockerfile copies is added back.
+# A denylist would have to be extended for every new file, and the one it would miss is
+# `.env`: it sits in the repository root, holds real credentials, and reaches the build
+# daemon — and every build stage — the moment it is part of the context.
+#
+# The cost of the allowlist is that a new COPY needs a line here. That failure is a build
+# error, which is the right way round: loud when something is missing, never silent when
+# something secret is present.
+*
+
+!package.json
+!package-lock.json
+
+!src
+!templates
+!public

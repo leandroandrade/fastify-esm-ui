@@ -2,10 +2,6 @@ import fp from 'fastify-plugin';
 import rateLimit from '@fastify/rate-limit';
 
 async function rateLimitPlugin(fastify) {
-  function keyByUserOrIp(req) {
-    return req.user?.sub || req.ip;
-  }
-
   function buildErrorResponse(req, context) {
     const err = new Error(`Muitas requisições. Tente novamente em ${context.after}.`);
     err.statusCode = 429;
@@ -18,26 +14,32 @@ async function rateLimitPlugin(fastify) {
     req.log.warn({ key, url: req.url }, 'rate-limit-plugin: limite excedido');
   }
 
-  // hook: 'preHandler' garante que um eventual requireAuth (onRequest) já populou
-  // req.user antes do keyGenerator rodar — evita queda silenciosa para req.ip
-  // em rotas autenticadas.
   await fastify.register(rateLimit, {
     global: true,
-    hook: 'preHandler',
+    // onRequest, not preHandler: @fastify/rate-limit appends its hook to whatever the
+    // route already declares for that phase. A route that authenticates in a preHandler
+    // therefore answers 401 and returns before the limiter counts the attempt, leaving the
+    // credential check as the one unthrottled endpoint in the application.
+    hook: 'onRequest',
     max: 100,
     timeWindow: '1 minute',
-    allowList: ['127.0.0.1'],
-    keyGenerator: keyByUserOrIp,
+    // No allowList: `req.ip` is derived from X-Forwarded-For whenever the peer is a trusted
+    // proxy, so exempting a literal address lets a client name itself into the exemption.
+    //
+    // No keyGenerator either: the library groups IPv6 clients by /64 only in its default
+    // generator. A custom one keys on the full address, and a subscriber holding a /64 then
+    // gets a fresh budget on every request.
     errorResponseBuilder: buildErrorResponse,
     onExceeded: logExceeded
   });
 
+  // Ready-made route options for tighter budgets, spread into a route declaration:
+  //   fastify.post('/', { ...fastify.rateLimitStrict, schema }, async function handler() {})
   fastify.decorate('rateLimitStrict', {
     config: {
       rateLimit: {
         max: 30,
-        timeWindow: '1 minute',
-        keyGenerator: keyByUserOrIp
+        timeWindow: '1 minute'
       }
     }
   });
@@ -46,8 +48,7 @@ async function rateLimitPlugin(fastify) {
     config: {
       rateLimit: {
         max: 5,
-        timeWindow: '1 hour',
-        keyGenerator: keyByUserOrIp
+        timeWindow: '1 hour'
       }
     }
   });

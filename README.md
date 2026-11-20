@@ -1,324 +1,136 @@
 # fastify-esm-ui
 
-Modern REST API template using Fastify with CommonJS, featuring built-in web UI support with EJS templates, TailwindCSS, and Alpine.js.
+Template for REST APIs with a server-rendered web UI, built on Fastify (ES modules), EJS, Tailwind CSS v4 and Alpine.js (CSP build). Secure defaults, ready to copy into a new project.
+
+Requires **Node.js 26** (see `.nvmrc`); the Docker image and the CI run on the same version.
 
 ## Features
 
-- 🚀 **Fastify Framework**: Fast and low overhead web framework
-- 📄 **EJS Templates**: Server-side rendering with layout support
-- 🎨 **TailwindCSS v4**: Utility-first CSS framework with custom theme
-- 🧩 **Reusable CSS Components**: Pre-built `.btn-*`, `.card`, `.alert-*` classes
-- ⚡ **Alpine.js**: Lightweight reactive JavaScript framework
-- 🔔 **Toast Notifications**: Stacked notification system with `Alpine.notificadores()` factory
-- 📚 **Swagger Documentation**: Auto-generated API documentation
-- 🔧 **Error Handling**: Custom error pages (404, 500) for both views and API
-- 🎯 **Plugin Architecture**: Modular and maintainable code structure
-- 🧪 **Testing Ready**: Built-in test setup with Node.js test runner
+- 🚀 **Fastify 5** with a plugin architecture loaded by `@fastify/autoload` (`src/core` for infrastructure, `src/business` for the application)
+- 📄 **EJS templates** with a layout, per-page scripts and standalone 404/500 pages
+- 🎨 **Tailwind CSS v4** with reusable components (`.btn-*`, `.card`, `.alert-*`, `.nav-link`)
+- 🌗 **Light/dark theme** that follows the OS until the user picks one, applied before first paint with no flash of the wrong theme
+- ⚡ **Alpine.js, CSP build**: no `unsafe-eval` and no `unsafe-inline` in the Content-Security-Policy
+- 🔔 **Toast notifications** through `Alpine.notificadores()`, including server-side messages (`errorMsg`)
+- 🔎 **SEO**: canonical link, Open Graph/Twitter tags with a 1200×630 image, JSON-LD, `robots.txt` and `sitemap.xml` generated from `PUBLIC_URL`
+- 📚 **Swagger UI** at `/docs`, enabled by `DOCS_ENABLED` (off by default)
+- ❤️ **Health check** at `/health`, used by the Docker `HEALTHCHECK`
+- 🧾 **Audit log**: one log line per POST/PUT/PATCH/DELETE, refused ones included
+- 🧩 **EJS partials** for the shared `<head>`, logo and error page
+- 🧪 **Tests**: Node.js test runner plus Playwright (Chromium and Firefox), with a test that fails on any console error or CSP violation
+
+## Security defaults
+
+| Area | Default |
+| --- | --- |
+| Headers | Helmet with a strict CSP (`script-src 'self'`, `style-src 'self'`, `frame-ancestors 'none'`), HSTS, `no-referrer` |
+| CSRF | `Sec-Fetch-Site`/`Origin` validation on every unsafe method, on every path |
+| Rate limit | 100 req/min per IP on `onRequest`, IPv6 grouped by /64, also applied to 404s |
+| Client IP | `TRUSTED_PROXY_IPS` (addresses/CIDRs), validated at boot; empty = trust nobody |
+| Input | Global sanitization of query/params/body (invisible characters, NFKC, prototype pollution keys) |
+| Errors | Only errors declared for the client (`@fastify/error`, `httpErrors`) reach it; everything else is generic |
+| Request id | `x-correlation-id` reused only when it looks like an id |
+| Static files | Dotfiles are never served |
+| API docs | `/docs` only exists when `DOCS_ENABLED=true` |
+| Audit | Mutating requests logged with status, IP, Origin, Referer and Sec-Fetch-Site (query strings stripped) |
+| Docker | `.dockerignore` allowlist (`.env` never reaches the build), non-root user, no npm in the runtime image, base image pinned by digest |
+| Supply chain | `.npmrc` with `ignore-scripts=true` and `min-release-age=7` |
+
+The reasoning behind each default is in [CLAUDE.md](CLAUDE.md) and in the comments of each plugin.
 
 ## Get started
 
-Installing dependencies:
-
 ```shell
 npm install
-```
-
-Configure environment file:
-
-```shell
+npm run e2e:setup        # Playwright browsers, needed only for the e2e tests
 cp .env.example .env
-```
-
-Start development server:
-
-```shell
 npm run dev
 ```
 
-The development server will:
-1. Build TailwindCSS automatically
-2. Copy the Alpine.js assets from `node_modules` to `public/js`
-3. Start the server with hot-reload enabled
-4. Watch for file changes in `./src`
+`npm run dev` builds Tailwind CSS, copies Alpine.js (CSP build) to `public/js` and starts the server watching `./src`.
 
 ## Available Scripts
 
 ```shell
-npm run dev           # Start development server with CSS build and hot-reload
-npm start            # Start production server
-npm test             # Run all tests (unit + E2E)
-npm run test:only    # Run tests marked with test.only
-npm run test:single  # Run single test file
-npm run test:coverage # Run tests with coverage report
-npm run lint         # Run ESLint
-npm run lint:fix     # Fix ESLint errors automatically
-npm run css:build    # Build TailwindCSS (production)
-npm run js:build     # Copy Alpine.js assets from node_modules to public/js
+npm run dev            # Build assets and start with --watch
+npm start              # Start production server
+npm run build          # Build Tailwind CSS and copy Alpine.js to public/js
+npm test               # Run all tests (unit, integration and e2e on Chromium)
+npm run test:firefox   # Run the e2e tests on Firefox
+npm run test:only      # Run tests marked with test.only
+npm run test:single    # Run a single test file
+npm run test:coverage  # Run tests with coverage report
+npm run lint           # Run ESLint
+npm run lint:fix       # Fix ESLint errors automatically
+npm run e2e:setup      # Install the Playwright browsers
 ```
 
-## Testing
+## Environment variables
 
-### Unit Tests
-
-Run all unit tests:
-```bash
-npm test
-```
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP port |
+| `HOST` | `0.0.0.0` | Bind address |
+| `LOG_LEVEL` | `info` | Pino log level |
+| `PUBLIC_URL` | `http://localhost:3000` | Public origin used for canonical links, Open Graph, robots.txt and sitemap.xml |
+| `TRUSTED_ORIGINS` | *(empty)* | Cross-site origins allowed to send unsafe methods |
+| `TRUSTED_PROXY_IPS` | *(empty)* | Addresses/CIDRs of the proxy in front of the app |
+| `TRUSTED_PROXY_DEBUG` | `false` | Logs the connection peer of every request, to discover the proxy range |
+| `DOCS_ENABLED` | `false` | Registers Swagger UI at `/docs` (`.env.example` turns it on for development) |
+| `GIT_COMMIT_HASH` | `dev` | Commit shown in the footer (Docker build argument) |
 
 ## Accessing the Application
 
-**Web Interface:**
 ```
-http://localhost:3000/
-```
-
-**API Base URL:**
-```
-http://localhost:3000/api
+http://localhost:3000/             # Web interface
+http://localhost:3000/api          # API base URL
+http://localhost:3000/docs         # API documentation (Swagger, with DOCS_ENABLED=true)
+http://localhost:3000/health       # Health check
 ```
 
-**API Documentation (Swagger):**
-```
-http://localhost:3000/docs
-```
+Sample requests are in [`http/localhost.http`](http/localhost.http).
 
-## Build Image
-
-Command to build docker image:
-```shell
-docker build -t leandromandrade/fastify-esm-ui .
-```
-
-## Production
-
-Starting application in production environment:
+## Docker
 
 ```shell
-docker compose -f docker-compose-production.yml up -d --build
+docker build --build-arg GIT_COMMIT_HASH=$(git rev-parse HEAD) -t fastify-esm-ui .
+docker compose up -d --build     # http://localhost:8080
+docker compose down
 ```
-
-Stopping application in production environment:
-
-```shell
-docker compose -f docker-compose-production.yml down -v
-```
-
-Production URLs:
-```
-http://localhost:8080/              # Web Interface
-http://localhost:8080/api           # API Base URL
-http://localhost:8080/docs  # API Documentation
-```
-
-## Requests
-
-All the API requests are available in the ```requests``` directory at the root path of the project.
 
 ## Structure of project
 
 ```
 .
 ├── src
-│   ├── app.js                 # Application factory
-│   ├── server.js              # Server startup and graceful shutdown
-│   ├── configs.js             # Fastify configuration
-│   ├── business               # Business logic layer
-│   │   ├── index.js
-│   │   ├── decorators         # Fastify instance decorators
-│   │   │   └── date.js
-│   │   ├── repositories       # Data access layer
-│   │   │   └── sample-repository.js
-│   │   ├── routes             # API routes (prefix: /api)
-│   │   │   └── sample
-│   │   │       ├── index.js
-│   │   │       └── schema.js
-│   │   ├── views              # View routes (web pages)
-│   │   │   └── index.js
-│   │   └── swagger
-│   │       └── sample-swagger.yaml
-│   └── core                   # Infrastructure layer
-│       ├── index.js
+│   ├── app.js                       # Application factory
+│   ├── server.js                    # Server startup and graceful shutdown
+│   ├── configs.js                   # Fastify options (trust proxy, request id, AJV, timeouts)
+│   ├── business                     # Application layer
+│   │   ├── decorators               # Fastify instance decorators
+│   │   ├── repositories             # Data access layer
+│   │   ├── routes                   # API routes (prefix: /api)
+│   │   ├── swagger                  # OpenAPI specification
+│   │   └── views                    # Page routes
+│   └── core
 │       └── plugins
-│           ├── env.js         # Environment variables
-│           ├── error-handler.js # Error handling (API + Views)
-│           ├── not-found.js   # 404 handler (API + Views)
-│           ├── sensible.js    # HTTP utilities
-│           ├── swagger.js     # API documentation
-│           ├── view.js        # EJS template engine
-│           ├── static.js      # Static file serving
-│           ├── cookie.js      # Cookie support
-│           └── formbody.js    # Form parsing
-├── templates                  # EJS templates
-│   ├── layout.ejs            # Base layout with navigation
-│   ├── home.ejs              # Home page
-│   ├── 404.ejs               # 404 error page
-│   ├── 500.ejs               # 500 error page
-│   └── css
-│       └── custom.css        # TailwindCSS source
-├── public                     # Static assets
-│   ├── css
-│   │   └── styles.css        # Compiled TailwindCSS
-│   ├── js
-│   │   ├── alpine.min.js     # Alpine.js library
-│   │   ├── main.js           # Global Alpine setup (notifications + formatters)
-│   │   └── api-demo.js       # Example Alpine component (API integration)
-│   └── assets
-│       └── favicon.ico
-└── tests
-    ├── business
-    │   ├── decorators
-    │   │   └── date.test.js
-    │   └── routes
-    │       └── sample-controller.test.js
-    ├── core
-    │   ├── integration
-    │   │   └── swagger.test.js
-    │   └── plugins
-    │       ├── error-handler.test.js
-    │       └── not-found.test.js
-    └── shared
-        └── helper.js
+│           ├── env.js               # Environment variables (@fastify/env)
+│           ├── health.js            # /health
+│           ├── audit-log.js         # Audit trail of mutating requests
+│           ├── helmet.js            # Security headers and CSP
+│           ├── sec-fetch-validation.js  # CSRF protection
+│           ├── rate-limit.js        # Rate limiting
+│           ├── sanitize.js          # Input sanitization
+│           ├── trust-proxy-diagnostic.js  # Proxy range discovery and drift warning
+│           ├── error-handler.js     # Error handling (API + views)
+│           ├── not-found.js         # 404 handler (API + views)
+│           ├── view.js              # EJS and default view context (SEO)
+│           ├── robots.js            # /robots.txt
+│           ├── sitemap.js           # /sitemap.xml
+│           ├── static.js            # /public/*
+│           ├── swagger.js           # /docs
+│           └── ...                  # cookie, formbody, sensible, schema, api-request
+├── templates                        # EJS layout, pages, partials/ and Tailwind entry (css/custom.css)
+├── public                           # Static assets (built CSS, Alpine, page scripts)
+└── tests                            # Unit, integration and e2e (Playwright) tests
 ```
-
-The main idea behind this structure is to separate the main project resources from the business features:
-
-- **core**: Infrastructure plugins and core functionality needed by the entire application
-- **business**: Business logic including API routes, view routes, decorators, and repositories
-- **templates**: EJS templates for server-side rendering
-- **public**: Static assets (CSS, JavaScript, images)
-
-## UI Technologies
-
-### TailwindCSS v4
-
-Custom theme with primary colors:
-- Primary Light: `#92d8fc`
-- Primary: `#6399f1`
-- Primary Dark: `#2e56e2`
-
-Usage example:
-```html
-<button class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded">
-  Click me
-</button>
-```
-
-### Reusable CSS Components
-
-Component classes are defined in `templates/css/custom.css` under `@layer components`. Use them to keep markup consistent across pages:
-
-| Class | Purpose |
-| --- | --- |
-| `.btn-primary` / `.btn-secondary` / `.btn-danger` / `.btn-icon` | Standard button variants with disabled/hover states |
-| `.card` | Surface container with border and dark mode |
-| `.card-stat` | Compact card variant (centered, padded) for metrics |
-| `.alert-info` / `.alert-success` / `.alert-warning` / `.alert-danger` | Inline alert boxes with semantic colors |
-
-Example:
-```html
-<div class="card p-6">
-  <h2 class="text-xl font-semibold">Title</h2>
-  <button class="btn-primary mt-4">Action</button>
-</div>
-
-<div class="alert-danger" role="alert">
-  <span>Something went wrong.</span>
-</div>
-```
-
-### Alpine.js
-
-Reactive components for interactivity:
-```html
-<div x-data="{ open: false }">
-  <button @click="open = !open">Toggle</button>
-  <div x-show="open">Content</div>
-</div>
-```
-
-#### Notification System
-
-The layout renders a stack of toasts (multiple notifications can be displayed simultaneously, each with auto-dismiss and a manual close button). Trigger a notification by dispatching the `show-notification` event — the recommended way is the `Alpine.notificadores()` factory, which exposes the helpers ready to be spread into any Alpine component:
-
-```javascript
-function meuComponente() {
-  return {
-    ...Alpine.notificadores(),
-
-    async salvar() {
-      try {
-        await fetch('/api/...', { method: 'POST' });
-        this.notificarSucesso('Registro salvo');
-      } catch (err) {
-        this.notificarErro('Falha ao salvar');
-      }
-    }
-  };
-}
-```
-
-Available methods (all accept an optional `duracao` in ms):
-- `notificarSucesso(mensagem)`
-- `notificarErro(mensagem)`
-- `notificarAviso(mensagem)`
-- `notificarInfo(mensagem)`
-
-If you need to trigger a notification from outside an Alpine component, dispatch the underlying event directly:
-
-```javascript
-window.dispatchEvent(new CustomEvent('show-notification', {
-  detail: { message: 'Hello', type: 'success', duration: 5000 }
-}));
-```
-
-#### Formatters Store
-
-A shared `Alpine.store('formatters')` provides reusable formatting helpers. Use it via `$store.formatters` in templates:
-
-```html
-<span x-text="$store.formatters.formatarDataRelativa(item.criado_em)"></span>
-```
-
-Add new formatters to `public/js/main.js` to make them available across all pages.
-
-### EJS Templates
-
-Server-side rendering with layouts:
-```javascript
-reply.view('template-name', { data }, { layout: 'layout' });
-```
-
-## Error Handling
-
-The application automatically detects request type and responds accordingly:
-
-- **API requests** (`/api/*`): Returns JSON error responses
-- **View requests**: Renders custom error pages (404.ejs, 500.ejs)
-
-## Creating New Views
-
-1. Add route in `src/business/views/index.js`:
-```javascript
-app.get('/my-page', (req, reply) => {
-  return reply.view('my-page', { data }, { layout: 'layout' });
-});
-```
-
-2. Create template in `templates/my-page.ejs`:
-```html
-<div class="container mx-auto px-6 py-12">
-  <h1 class="text-3xl font-bold">My Page</h1>
-  <!-- Your content here -->
-</div>
-```
-
-## Color Scheme
-
-The template uses a blue color palette:
-- Use `text-primary`, `bg-primary`, `border-primary` for primary color
-- Use `hover:bg-primary-dark` for hover states
-- Full dark mode support with `dark:` prefix
-
-## License
-
-Licensed under [MIT](./LICENSE).

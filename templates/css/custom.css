@@ -1,10 +1,17 @@
 @import "tailwindcss";
 @source "../";
 
+/* Drive dark mode from a `data-theme="dark"` attribute on <html> instead of the OS
+   `prefers-color-scheme`, so the theme toggle can override the system preference.
+   public/js/theme-init.js sets the attribute before first paint. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
   --color-primary-light: #92d8fc;
   --color-primary: #6399f1;
   --color-primary-dark: #2e56e2;
+
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 [x-cloak] {
@@ -15,7 +22,30 @@ html {
   scroll-behavior: smooth;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @layer components {
+  /* Visible only when focused with the keyboard: lets a keyboard user jump past the nav. */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-primary focus:text-white focus:shadow-lg;
+  }
+
+  .nav-link {
+    @apply px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary dark:hover:text-primary hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors aria-[current=page]:text-primary;
+  }
+
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-dark rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
@@ -58,5 +88,9 @@ html {
 
   .alert-danger {
     @apply flex items-start gap-3 px-4 py-3 rounded-lg border bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300;
+  }
+
+  .kbd {
+    @apply rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 px-1.5 py-0.5 font-mono text-xs text-gray-500 dark:text-gray-400;
   }
 }

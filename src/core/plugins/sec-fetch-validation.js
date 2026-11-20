@@ -1,114 +1,114 @@
 import fp from 'fastify-plugin';
 import createError from '@fastify/error';
 
-const SecFetchValidationError = createError('SEC_FETCH_VALIDATION_ERROR', '%s', 403);
+const SecFetchValidationError = createError('SEC_FETCH_VALIDATION_ERROR', 'Request not allowed', 403);
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
+
+// Normalized to `scheme://host[:port]` so the default port collapses on both sides of
+// every comparison: `http://localhost:80` equals `http://localhost`, `:3000` does not.
+function toOrigin(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function originFromHeaders(req) {
+  return req.headers.origin || req.headers.referer || null;
+}
+
+function originFromRequest(req) {
+  const host = req.headers.host;
+  if (!host) {
+    return null;
+  }
+
+  return toOrigin(`${req.protocol}://${host}`);
+}
 
 async function secFetchValidationPlugin(fastify) {
   const allowedOrigins = fastify.allowedOrigins;
 
-  const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS', 'TRACE'];
-
-  function getHostWithoutPort(hostHeader = '') {
-    // ex: "api.example.com:443" -> "api.example.com"
-    return hostHeader.split(':')[0].trim().toLowerCase();
-  }
-
-  function originFromHeaders(req) {
-    const origin = req.headers.origin;
-    if (origin) return origin;
-
-    const referer = req.headers.referer;
-    if (!referer) return null;
-
-    try {
-      return new URL(referer).origin;
-    } catch {
-      return null;
-    }
-  }
-
-  function parseOrigin(originValue) {
-    try {
-      return new URL(originValue);
-    } catch {
-      return null;
-    }
-  }
-
   /**
-   * Proteção CSRF baseada nos headers Sec-Fetch.
+   * CSRF protection based on the Sec-Fetch headers, registered as a global `onRequest`
+   * hook so a request is blocked before body parsing.
    *
-   * Este decorator também é registrado como hook global `onRequest`. Ele só atua
-   * em `/api/*` (`fastify.isApiRequest(req)`); fora desse prefixo é no-op por
-   * desenho. Portanto, toda rota que altera estado deve viver sob `/api/*`.
+   * Acts on every unsafe method on every path, not only `/api/*`: a rule keyed on where a
+   * route happens to be mounted is one nobody remembers when adding the next one, and it
+   * would leave any state-changing route mounted outside the prefix unprotected. Do not
+   * also add it as a `preHandler`.
    *
-   * Métodos seguros (`GET`, `HEAD`, `OPTIONS`, `TRACE`) sempre passam. Para
-   * métodos mutadores:
-   * - `same-origin` e `same-site`: permitido.
-   * - `cross-site`: permitido apenas se `Origin` ou `Referer` estiver em
-   *   `allowedOrigins` (derivado de `CORS_ORIGIN`).
-   * - `none`, ausente ou desconhecido: exige `Origin` ou `Referer`; passa se a
-   *   origem bater com o host da requisição ou estiver em `allowedOrigins`.
+   * - Safe methods (`GET`, `HEAD`, `OPTIONS`, `TRACE`) always pass.
+   * - `same-origin` and `same-site` pass. Note that `same-site` admits any sibling subdomain
+   *   of the deployed domain.
+   * - `cross-site` passes only when `Origin`/`Referer` is in TRUSTED_ORIGINS.
+   * - `none`, absent or unknown require `Origin`/`Referer`, matching the request's own origin
+   *   or one in TRUSTED_ORIGINS — otherwise omitting the header would bypass the check.
    *
-   * O hook roda em `onRequest` para bloquear antes de body parsing e validação de
-   * schema. Não use este decorator como `preHandler` em rotas `/api/*`, porque o
-   * hook global já cobre esse escopo.
+   * Every block answers the same generic 403: which path fired stays in the log only.
    */
-  fastify.decorate('secFetchSiteProtection', (req, reply, done) => {
-    if (!fastify.isApiRequest(req)) {
-      return done();
-    }
-    if (SAFE_METHODS.includes(req.method)) {
-      return done();
+  async function secFetchSiteProtection(req) {
+    if (SAFE_METHODS.has(req.method)) {
+      return;
     }
 
+    // No exemption for an Authorization header: nothing here verifies one, so any value
+    // would switch the check off. A non-browser client that must POST belongs in
+    // TRUSTED_ORIGINS, or gets an exemption written next to the code that verifies its token.
     const secFetchSite = req.headers['sec-fetch-site'];
-    const requestHost = getHostWithoutPort(req.headers.host || '');
+    const requestHost = req.headers.host;
 
-    if (secFetchSite === 'same-origin' || secFetchSite === 'same-site') {
-      return done();
+    const isSameSiteRequest = secFetchSite === 'same-origin' || secFetchSite === 'same-site';
+    if (isSameSiteRequest) {
+      return;
     }
+
+    const originValue = originFromHeaders(req);
+    const origin = toOrigin(originValue);
 
     if (secFetchSite === 'cross-site') {
-      const originValue = originFromHeaders(req);
-      if (originValue && allowedOrigins.has(originValue)) {
-        return done();
+      if (origin && allowedOrigins.has(origin)) {
+        return;
       }
 
-      fastify.log.error({ origin: originValue, secFetchSite, requestHost }, 'sec-fetch-validation: cross-site requests not allowed');
-      return done(new SecFetchValidationError('Cross-site requests not allowed'));
+      req.log.warn({ origin, secFetchSite, requestHost }, 'sec-fetch-validation-plugin: cross-site requests not allowed');
+
+      throw new SecFetchValidationError();
     }
 
-    // Para same-site/none/ausente/desconhecido => exige Origin/Referer (evita bypass)
-    const originValue = originFromHeaders(req);
     if (!originValue) {
-      fastify.log.error({ secFetchSite, requestHost }, 'sec-fetch-validation: missing Origin/Referer');
-      return done(new SecFetchValidationError('Missing Origin/Referer'));
+      req.log.warn({ secFetchSite, requestHost }, 'sec-fetch-validation-plugin: missing Origin/Referer');
+
+      throw new SecFetchValidationError();
     }
 
-    const originUrl = parseOrigin(originValue);
-    if (!originUrl) {
-      fastify.log.error({ origin: originValue, secFetchSite, requestHost }, 'sec-fetch-validation: invalid Origin/Referer');
-      return done(new SecFetchValidationError('Invalid Origin/Referer'));
+    if (!origin) {
+      req.log.warn({ origin: originValue, secFetchSite, requestHost }, 'sec-fetch-validation-plugin: invalid Origin/Referer');
+
+      throw new SecFetchValidationError();
     }
 
-    const originHost = originUrl.host.toLowerCase();
-
-    if (originHost === requestHost) {
-      return done();
-    }
-    if (allowedOrigins.has(originUrl.origin)) {
-      return done();
+    if (origin === originFromRequest(req)) {
+      return;
     }
 
-    fastify.log.error({ origin: originUrl.origin, originHost, secFetchSite, requestHost }, 'sec-fetch-validation: request origin not allowed');
-    return done(new SecFetchValidationError('Request origin not allowed'));
-  });
+    if (allowedOrigins.has(origin)) {
+      return;
+    }
 
-  fastify.addHook('onRequest', fastify.secFetchSiteProtection);
+    req.log.warn({ origin, secFetchSite, requestHost }, 'sec-fetch-validation-plugin: request origin not allowed');
+
+    throw new SecFetchValidationError();
+  }
+
+  fastify.decorate('secFetchSiteProtection', secFetchSiteProtection);
+
+  fastify.addHook('onRequest', secFetchSiteProtection);
 }
 
 export default fp(secFetchValidationPlugin, {
   name: 'sec-fetch-validation',
-  dependencies: ['env', 'api-request']
+  dependencies: ['env']
 });

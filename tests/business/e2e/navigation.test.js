@@ -1,222 +1,121 @@
-import { test, beforeEach, afterEach } from 'node:test';
-import { chromium } from 'playwright';
+import { test } from 'node:test';
 
-import { buildApp } from '../../shared/helper.js';
+import { iniciarServidor, abrirNavegador } from '../../shared/e2e-helper.js';
 
-let fastify;
+const MOBILE = { viewport: { width: 375, height: 667 } };
 
-beforeEach(async (t) => {
-  fastify = await buildApp();
-});
+async function abrirHome(t, options) {
+  const { baseUrl } = await iniciarServidor(t);
+  const { page } = await abrirNavegador(t, options);
 
-afterEach(async (t) => {
-  await fastify.close();
-});
+  await page.goto(baseUrl);
+  await page.waitForSelector('nav');
+
+  return { page, baseUrl };
+}
 
 test('[e2e] estrutura completa da navegacao deve estar presente', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page } = await abrirHome(t);
 
-  await fastify.listen({ port: 3000 });
+  t.assert.ok(await page.locator('nav a:has-text("Home")').first().isVisible(), 'Menu Home deve estar visível');
+  t.assert.ok(await page.locator('nav a:has-text("API Docs")').first().isVisible(), 'Menu API Docs deve estar visível');
+  t.assert.ok(await page.locator('nav a:has-text("GitHub")').first().isVisible(), 'Menu GitHub deve estar visível');
+  t.assert.ok(await page.locator('nav svg').first().isVisible(), 'Logo deve estar visível');
+  t.assert.ok(await page.locator('nav strong:has-text("Fastify ESM")').isVisible(), 'Texto Fastify ESM deve estar visível');
+});
 
-  try {
-    await page.goto('http://localhost:3000/');
+test('[e2e] link da pagina atual deve ser marcado com aria-current', async (t) => {
+  const { page } = await abrirHome(t);
 
-    const homeMenu = page.locator('nav a:has-text("Home")').first();
-    const apiDocsMenu = page.locator('nav a:has-text("API Docs")').first();
-    const githubMenu = page.locator('nav a:has-text("GitHub")').first();
+  const home = page.locator('nav a:has-text("Home")').first();
+  t.assert.strictEqual(await home.getAttribute('aria-current'), 'page');
 
-    await page.waitForSelector('nav a:has-text("Home")', { timeout: 5000 });
-
-    const isHomeVisible = await homeMenu.isVisible();
-    const isApiDocsVisible = await apiDocsMenu.isVisible();
-    const isGithubVisible = await githubMenu.isVisible();
-
-    t.assert.ok(isHomeVisible, 'Menu Home deve estar visível');
-    t.assert.ok(isApiDocsVisible, 'Menu API Docs deve estar visível');
-    t.assert.ok(isGithubVisible, 'Menu GitHub deve estar visível');
-
-    const logo = page.locator('nav svg').first();
-    const isLogoVisible = await logo.isVisible();
-    t.assert.ok(isLogoVisible, 'Logo deve estar visível');
-
-    const brandText = page.locator('nav strong:has-text("Fastify ESM")');
-    const isBrandVisible = await brandText.isVisible();
-    t.assert.ok(isBrandVisible, 'Texto Fastify ESM deve estar visível');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  const docs = page.locator('nav a:has-text("API Docs")').first();
+  t.assert.strictEqual(await docs.getAttribute('aria-current'), null);
 });
 
 test('[e2e] navegacao para Home deve funcionar', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page, baseUrl } = await abrirHome(t);
 
-  await fastify.listen({ port: 3001 });
+  await page.locator('nav a:has-text("Home")').first().click();
+  await page.waitForURL(`${baseUrl}/`);
 
-  try {
-    await page.goto('http://localhost:3001/');
-
-    const homeMenu = page.locator('nav a:has-text("Home")').first();
-    await homeMenu.click();
-
-    await page.waitForTimeout(500);
-
-    const currentUrl = page.url();
-    t.assert.strictEqual(currentUrl, 'http://localhost:3001/', 'Deve estar na página home');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  t.assert.strictEqual(page.url(), `${baseUrl}/`, 'Deve estar na página home');
 });
 
 test('[e2e] logo deve navegar para pagina inicial', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page, baseUrl } = await abrirHome(t);
 
-  await fastify.listen({ port: 3002 });
+  await page.locator('nav a:has(svg)').first().click();
+  await page.waitForURL(`${baseUrl}/`);
 
-  try {
-    await page.goto('http://localhost:3002/');
-    await page.waitForSelector('nav', { timeout: 5000 });
-
-    const logoLink = page.locator('nav a:has(svg)').first();
-    await logoLink.click();
-
-    await page.waitForTimeout(500);
-
-    const currentUrl = page.url();
-    t.assert.strictEqual(currentUrl, 'http://localhost:3002/', 'Logo deve navegar para página inicial');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  t.assert.strictEqual(page.url(), `${baseUrl}/`, 'Logo deve navegar para página inicial');
 });
 
 test('[e2e] link do GitHub deve ter target blank', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page } = await abrirHome(t);
 
-  await fastify.listen({ port: 3003 });
+  const githubLink = page.locator('nav a:has-text("GitHub")').first();
 
-  try {
-    await page.goto('http://localhost:3003/');
-    await page.waitForSelector('nav', { timeout: 5000 });
-
-    const githubLink = page.locator('nav a:has-text("GitHub")').first();
-    const target = await githubLink.getAttribute('target');
-    const rel = await githubLink.getAttribute('rel');
-    const href = await githubLink.getAttribute('href');
-
-    t.assert.strictEqual(target, '_blank', 'Link do GitHub deve ter target="_blank"');
-    t.assert.strictEqual(rel, 'noopener noreferrer', 'Link do GitHub deve ter rel="noopener noreferrer"');
-    t.assert.ok(href.includes('github.com'), 'Link do GitHub deve apontar para github.com');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  t.assert.strictEqual(await githubLink.getAttribute('target'), '_blank', 'Link do GitHub deve ter target="_blank"');
+  t.assert.strictEqual(await githubLink.getAttribute('rel'), 'noopener noreferrer', 'Link do GitHub deve ter rel="noopener noreferrer"');
+  t.assert.ok((await githubLink.getAttribute('href')).includes('github.com'), 'Link do GitHub deve apontar para github.com');
 });
 
 test('[e2e] menu mobile deve estar presente e funcionar', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    viewport: { width: 375, height: 667 } // iPhone SE size
-  });
-  const page = await context.newPage();
+  const { page } = await abrirHome(t, MOBILE);
 
-  await fastify.listen({ port: 3004 });
+  const botao = page.locator('button[aria-controls="mobile-menu"]');
+  t.assert.ok(await botao.isVisible(), 'Botão de menu mobile deve estar visível em telas pequenas');
+  t.assert.strictEqual(await botao.getAttribute('aria-expanded'), 'false');
 
-  try {
-    await page.goto('http://localhost:3004/');
-    await page.waitForSelector('nav', { timeout: 5000 });
+  const menu = page.locator('#mobile-menu');
+  t.assert.ok(!(await menu.isVisible()), 'Menu mobile deve estar oculto inicialmente');
 
-    const mobileMenuButton = page.locator('nav button.lg\\:hidden').first();
-    const isButtonVisible = await mobileMenuButton.isVisible();
-    t.assert.ok(isButtonVisible, 'Botão de menu mobile deve estar visível em telas pequenas');
+  await botao.click();
+  await menu.waitFor({ state: 'visible' });
+  t.assert.strictEqual(await botao.getAttribute('aria-expanded'), 'true', 'aria-expanded deve acompanhar o menu');
 
-    const mobileMenu = page.locator('nav .lg\\:hidden.py-4');
-    let isMenuVisible = await mobileMenu.isVisible();
-    t.assert.ok(!isMenuVisible, 'Menu mobile deve estar oculto inicialmente');
-
-    await mobileMenuButton.click();
-
-    await page.waitForTimeout(300);
-    isMenuVisible = await mobileMenu.isVisible();
-    t.assert.ok(isMenuVisible, 'Menu mobile deve estar visível após clique');
-
-    const homeItem = mobileMenu.locator('a:has-text("Home")');
-    const apiDocsItem = mobileMenu.locator('a:has-text("API Docs")');
-    const githubItem = mobileMenu.locator('a:has-text("GitHub")');
-
-    t.assert.ok(await homeItem.isVisible(), 'Item Home deve estar visível no menu mobile');
-    t.assert.ok(await apiDocsItem.isVisible(), 'Item API Docs deve estar visível no menu mobile');
-    t.assert.ok(await githubItem.isVisible(), 'Item GitHub deve estar visível no menu mobile');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  t.assert.ok(await menu.locator('a:has-text("Home")').isVisible(), 'Item Home deve estar visível no menu mobile');
+  t.assert.ok(await menu.locator('a:has-text("API Docs")').isVisible(), 'Item API Docs deve estar visível no menu mobile');
+  t.assert.ok(await menu.locator('a:has-text("GitHub")').isVisible(), 'Item GitHub deve estar visível no menu mobile');
 });
 
 test('[e2e] menu mobile deve fechar ao clicar em um item', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    viewport: { width: 375, height: 667 }
-  });
-  const page = await context.newPage();
+  const { page } = await abrirHome(t, MOBILE);
 
-  await fastify.listen({ port: 3005 });
+  await page.locator('button[aria-controls="mobile-menu"]').click();
 
-  try {
-    await page.goto('http://localhost:3005/');
-    await page.waitForSelector('nav', { timeout: 5000 });
+  const menu = page.locator('#mobile-menu');
+  await menu.waitFor({ state: 'visible' });
 
-    const mobileMenuButton = page.locator('nav button.lg\\:hidden').first();
-    await mobileMenuButton.click();
+  await menu.locator('a:has-text("Home")').click();
+  await menu.waitFor({ state: 'hidden' });
 
-    await page.waitForTimeout(300);
+  t.assert.ok(!(await menu.isVisible()), 'Menu mobile deve fechar após clique em item');
+});
 
-    const mobileMenu = page.locator('nav .lg\\:hidden.py-4');
-    const homeItem = mobileMenu.locator('a:has-text("Home")');
-    await homeItem.click();
+test('[e2e] skip link deve levar ao conteudo pelo teclado', async (t) => {
+  const { page } = await abrirHome(t);
 
-    await page.waitForTimeout(300);
+  await page.keyboard.press('Tab');
 
-    const isMenuVisible = await mobileMenu.isVisible();
-    t.assert.ok(!isMenuVisible, 'Menu mobile deve fechar após clique em item');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  const skipLink = page.locator('a.skip-link');
+  t.assert.ok(await skipLink.isVisible(), 'O skip link deve aparecer ao receber foco');
+
+  await page.keyboard.press('Enter');
+  t.assert.ok(page.url().endsWith('#conteudo'), 'Deve saltar para o conteúdo');
 });
 
 test('[e2e] footer deve estar presente em todas as paginas', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page } = await abrirHome(t);
 
-  await fastify.listen({ port: 3006 });
+  const footer = page.locator('footer');
+  t.assert.ok(await footer.isVisible(), 'Footer deve estar visível');
 
-  try {
-    await page.goto('http://localhost:3006/');
-    await page.waitForLoadState('networkidle');
-
-    const footer = page.locator('footer');
-    const isFooterVisible = await footer.isVisible();
-    t.assert.ok(isFooterVisible, 'Footer deve estar visível');
-
-    const footerText = await footer.textContent();
-    t.assert.ok(footerText.includes('Fastify ESM UI'), 'Footer deve conter "Fastify ESM"');
-    t.assert.ok(footerText.includes('UI Template'), 'Footer deve conter "REST API Template"');
-
-    const currentYear = new Date().getFullYear().toString();
-    t.assert.ok(footerText.includes(currentYear), 'Footer deve exibir o ano atual');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  const footerText = await footer.textContent();
+  t.assert.ok(footerText.includes('Fastify ESM UI'), 'Footer deve conter "Fastify ESM UI"');
+  t.assert.ok(footerText.includes('UI Template'), 'Footer deve conter "UI Template"');
+  t.assert.ok(footerText.includes(new Date().getFullYear().toString()), 'Footer deve exibir o ano atual');
+  t.assert.ok(footerText.includes('build'), 'Footer deve exibir o commit do build');
 });

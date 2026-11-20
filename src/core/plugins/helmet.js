@@ -6,13 +6,19 @@ async function helmetPlugin(fastify) {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-eval'"],
+        // No 'unsafe-eval': the pages run the CSP build of Alpine (@alpinejs/csp), which
+        // parses expressions itself instead of calling new Function. No 'unsafe-inline' for
+        // styles either — Alpine sets styles through CSSOM (el.style), which CSP allows; only a
+        // `style` attribute in markup or set as a string would need it.
+        scriptSrc: ["'self'"],
         scriptSrcElem: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'"],
         imgSrc: ["'self'", 'data:'],
         connectSrc: ["'self'"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
+        // Same intent as frameguard's X-Frame-Options: DENY below; helmet's default is 'self'.
+        frameAncestors: ["'none'"],
         upgradeInsecureRequests: []
       }
     },

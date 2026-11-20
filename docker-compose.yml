@@ -6,6 +6,13 @@ services:
       - '8080:8080'
     environment:
       PORT: 8080
+      LOG_LEVEL: info
+      PUBLIC_URL: http://localhost:8080
+      # Nothing sits in front of this container — the port above is published directly, so
+      # X-Forwarded-For is whatever the caller sends. Declaring a trusted proxy here would
+      # let a client rotate the header and mint a fresh rate-limit budget on every request.
+      # Empty = trust nobody.
+      TRUSTED_PROXY_IPS: ''
 
 networks:
   default:

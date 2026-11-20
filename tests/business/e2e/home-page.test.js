@@ -1,163 +1,122 @@
-import { test, beforeEach, afterEach } from 'node:test';
-import { chromium } from 'playwright';
+import { test } from 'node:test';
 
-import { buildApp } from '../../shared/helper.js';
+import { iniciarServidor, abrirNavegador } from '../../shared/e2e-helper.js';
 
-let fastify;
+async function abrirHome(t, options) {
+  const { baseUrl } = await iniciarServidor(t);
+  const { page } = await abrirNavegador(t, options);
 
-beforeEach(async (t) => {
-  fastify = await buildApp();
-});
+  await page.goto(baseUrl);
+  await page.waitForLoadState('networkidle');
 
-afterEach(async (t) => {
-  await fastify.close();
-});
+  return { page, baseUrl };
+}
 
 test('[e2e] home page deve carregar corretamente com todos os elementos', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page } = await abrirHome(t);
 
-  await fastify.listen({ port: 3000 });
+  await page.waitForSelector('h1:has-text("Fastify ESM")');
 
-  try {
-    await page.goto('http://localhost:3000/');
-
-    const title = page.locator('h1:has-text("Fastify ESM")');
-    await page.waitForSelector('h1:has-text("Fastify ESM")', { timeout: 5000 });
-
-    const isTitleVisible = await title.isVisible();
-    t.assert.ok(isTitleVisible, 'Título principal deve estar visível');
-
-    const description = page.locator('p:has-text("Template pronto para construção de APIs REST")');
-    const isDescriptionVisible = await description.isVisible();
-    t.assert.ok(isDescriptionVisible, 'Descrição deve estar visível');
-
-    const apiDocsButton = page.locator('a:has-text("Ver Documentação da API")');
-    const githubButton = page.locator('a:has-text("Ver no GitHub")');
-
-    const isApiDocsVisible = await apiDocsButton.isVisible();
-    const isGithubVisible = await githubButton.isVisible();
-
-    t.assert.ok(isApiDocsVisible, 'Botão de documentação da API deve estar visível');
-    t.assert.ok(isGithubVisible, 'Botão do GitHub deve estar visível');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  t.assert.ok(await page.locator('h1:has-text("Fastify ESM")').isVisible(), 'Título principal deve estar visível');
+  t.assert.ok(await page.locator('p:has-text("Template pronto para construção de APIs REST")').isVisible(), 'Descrição deve estar visível');
+  t.assert.ok(await page.locator('a:has-text("Ver Documentação da API")').isVisible(), 'Botão de documentação da API deve estar visível');
+  t.assert.ok(await page.locator('a:has-text("Ver no GitHub")').isVisible(), 'Botão do GitHub deve estar visível');
 });
 
 test('[e2e] home page deve exibir os 6 cards de features', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page } = await abrirHome(t);
 
-  await fastify.listen({ port: 3001 });
+  const cardCount = await page.locator('.grid > div.card').count();
+  t.assert.strictEqual(cardCount, 6, 'Deve haver 6 cards de features');
 
-  try {
-    await page.goto('http://localhost:3001/');
-    await page.waitForLoadState('networkidle');
-
-    const featureCards = page.locator('.grid > div.card');
-    const cardCount = await featureCards.count();
-    t.assert.strictEqual(cardCount, 6, 'Deve haver 6 cards de features');
-
-    const fastifyCard = page.locator('h3:has-text("Fastify Framework")').first();
-    const ejsCard = page.locator('h3:has-text("Templates EJS")').first();
-    const tailwindCard = page.locator('h3:has-text("TailwindCSS v4")').first();
-    const alpineCard = page.locator('h3:has-text("Alpine.js")').first();
-    const docsCard = page.locator('h3:has-text("API Documentation")').first();
-    const errorCard = page.locator('h3:has-text("Error Handling")').first();
-
-    t.assert.ok(await fastifyCard.isVisible(), 'Card Fastify deve estar visível');
-    t.assert.ok(await ejsCard.isVisible(), 'Card EJS deve estar visível');
-    t.assert.ok(await tailwindCard.isVisible(), 'Card TailwindCSS deve estar visível');
-    t.assert.ok(await alpineCard.isVisible(), 'Card Alpine.js deve estar visível');
-    t.assert.ok(await docsCard.isVisible(), 'Card API Documentation deve estar visível');
-    t.assert.ok(await errorCard.isVisible(), 'Card Error Handling deve estar visível');
-  } finally {
-    await browser.close();
-    await fastify.close();
+  const titulos = ['Fastify Framework', 'Templates EJS', 'TailwindCSS v4', 'Alpine.js', 'API Documentation', 'Error Handling'];
+  for (const titulo of titulos) {
+    const card = page.locator(`h3:has-text("${titulo}")`).first();
+    t.assert.ok(await card.isVisible(), `Card ${titulo} deve estar visível`);
   }
 });
 
 test('[e2e] navegacao para API documentation deve funcionar', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page } = await abrirHome(t);
 
-  await fastify.listen({ port: 3002 });
+  await page.locator('a:has-text("Ver Documentação da API")').first().click();
+  await page.waitForSelector('.swagger-ui .info');
 
-  try {
-    await page.goto('http://localhost:3002/');
-
-    const apiDocsButton = page.locator('a:has-text("Ver Documentação da API")').first();
-    await apiDocsButton.click();
-
-    await page.waitForTimeout(500);
-
-    const currentUrl = page.url();
-    t.assert.ok(currentUrl.includes('/docs'), 'Deve navegar para /docs');
-  } finally {
-    await browser.close();
-    await fastify.close();
-  }
+  t.assert.ok(page.url().includes('/docs'), 'Deve navegar para /docs');
 });
 
 test('[e2e] secao de getting started deve estar presente', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page } = await abrirHome(t);
 
-  await fastify.listen({ port: 3003 });
+  t.assert.ok(await page.locator('h2:has-text("Começando")').isVisible(), 'Seção "Começando" deve estar visível');
 
-  try {
-    await page.goto('http://localhost:3003/');
-    await page.waitForLoadState('networkidle');
-
-    const gettingStarted = page.locator('h2:has-text("Começando")');
-    const isGettingStartedVisible = await gettingStarted.isVisible();
-    t.assert.ok(isGettingStartedVisible, 'Seção "Começando" deve estar visível');
-
-    const npmInstall = page.locator('pre:has-text("npm install")');
-    const updateAlpine = page.locator('pre:has-text("npm run update:alpine")');
-    const npmDev = page.locator('pre:has-text("npm run dev")');
-
-    t.assert.ok(await npmInstall.isVisible(), 'Comando npm install deve estar visível');
-    t.assert.ok(await updateAlpine.isVisible(), 'Comando update:alpine deve estar visível');
-    t.assert.ok(await npmDev.isVisible(), 'Comando npm run dev deve estar visível');
-  } finally {
-    await browser.close();
-    await fastify.close();
+  const comandos = ['npm install', 'npm run build', 'cp .env.example .env', 'npm run dev'];
+  for (const comando of comandos) {
+    t.assert.ok(await page.locator(`pre:has-text("${comando}")`).isVisible(), `Comando ${comando} deve estar visível`);
   }
 });
 
+test('[e2e] demo de integracao deve chamar a API e exibir a resposta', async (t) => {
+  const { page } = await abrirHome(t);
+
+  await page.fill('input[aria-label="Seu nome"]', 'Ana');
+  await page.click('button:has-text("Enviar Requisição")');
+
+  const resposta = page.locator('pre:has-text("Hello Ana!")');
+  await resposta.waitFor({ state: 'visible' });
+
+  const json = JSON.parse(await resposta.textContent());
+  t.assert.strictEqual(json.message, 'Hello Ana!');
+  t.assert.strictEqual(json.success, true);
+
+  const notificacao = page.locator('#notification-alert');
+  await notificacao.waitFor({ state: 'visible' });
+  t.assert.ok((await notificacao.textContent()).includes('Hello Ana!'), 'A resposta também deve virar uma notificação');
+});
+
 test('[e2e] demo de notificacoes deve estar presente', async (t) => {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const { page } = await abrirHome(t);
 
-  await fastify.listen({ port: 3004 });
+  t.assert.ok(await page.locator('h2:has-text("Teste o Sistema de Notificações")').isVisible(), 'Título da demo de notificações deve estar visível');
 
-  try {
-    await page.goto('http://localhost:3004/');
-    await page.waitForLoadState('networkidle');
-
-    const demoTitle = page.locator('h2:has-text("Teste o Sistema de Notificações")');
-    const isDemoTitleVisible = await demoTitle.isVisible();
-    t.assert.ok(isDemoTitleVisible, 'Título da demo de notificações deve estar visível');
-
-    const successButton = page.locator('button:text-is("Success")');
-    const errorButton = page.locator('button:text-is("Error")');
-    const warningButton = page.locator('button:text-is("Warning")');
-    const infoButton = page.locator('button:text-is("Info")');
-
-    t.assert.ok(await successButton.isVisible(), 'Botão Success deve estar visível');
-    t.assert.ok(await errorButton.isVisible(), 'Botão Error deve estar visível');
-    t.assert.ok(await warningButton.isVisible(), 'Botão Warning deve estar visível');
-    t.assert.ok(await infoButton.isVisible(), 'Botão Info deve estar visível');
-  } finally {
-    await browser.close();
-    await fastify.close();
+  for (const rotulo of ['Success', 'Error', 'Warning', 'Info']) {
+    t.assert.ok(await page.locator(`button:text-is("${rotulo}")`).isVisible(), `Botão ${rotulo} deve estar visível`);
   }
+});
+
+// The CSP build of Alpine rejects unsupported expressions (arrow functions, globals such as
+// JSON or Date, template literals) with only a console warning, and a CSP violation is only a
+// console error. Without this test either one leaves a page silently half-working.
+test('[e2e] navegar pela home nao deve gerar erro no console nem violacao de CSP', async (t) => {
+  const { baseUrl } = await iniciarServidor(t);
+  const { page } = await abrirNavegador(t);
+
+  const problemas = [];
+  function registrar(mensagem) {
+    const ehErro = mensagem.type() === 'error';
+    const ehAvisoDoAlpine = mensagem.type() === 'warning' && mensagem.text().includes('Alpine');
+    if (ehErro || ehAvisoDoAlpine) {
+      problemas.push(`${mensagem.type()}: ${mensagem.text()}`);
+    }
+  }
+  function registrarExcecao(erro) {
+    problemas.push(`pageerror: ${erro.message}`);
+  }
+  page.on('console', registrar);
+  page.on('pageerror', registrarExcecao);
+
+  await page.goto(baseUrl);
+  await page.waitForLoadState('networkidle');
+
+  await page.fill('input[aria-label="Seu nome"]', 'Ana');
+  await page.click('button:has-text("Enviar Requisição")');
+  await page.waitForSelector('pre:has-text("Hello Ana!")');
+
+  await page.click('button:text-is("Warning")');
+  await page.click('#theme-toggle');
+
+  await page.goto(`${baseUrl}/docs`);
+  await page.waitForSelector('.swagger-ui .info');
+
+  t.assert.deepStrictEqual(problemas, []);
 });
